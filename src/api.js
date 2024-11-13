@@ -76,9 +76,22 @@ class DerivExchange {
             return await this.send({ balance: 1 });
         } catch (error) {
             console.error('Failed to fetch balance:', error);
-            throw error; // rethrow to handle in main
+            throw error; 
         }
     }
+
+
+    // fetchTicker  sends a request to the server to fetch the latest price for a given symbol
+    async fetchTicker(symbol) {
+        try {
+            const response = await this.send({ ticks: symbol });
+            return response; 
+        } catch (error) {
+            console.error(`Error fetching ticker for ${symbol}:`, error);
+            throw error;
+        }
+    }
+
 }
 
 module.exports = DerivExchange;
