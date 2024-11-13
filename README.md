@@ -1,9 +1,3 @@
-# My Deriv Project
-
-## Description
-This project is designed to interact with the Deriv API to perform various trading operations such as fetching balances, placing orders, modifying orders, closing positions, and canceling orders.
-
-## Project Structure
 
 ## Getting Started
 
