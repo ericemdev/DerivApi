@@ -1,0 +1,17 @@
+# IntelliJ IDEA project files
+.idea/
+*.iml
+*.iws
+
+# Eclipse project files
+.classpath
+.project
+.settings/
+
+# Environment and configuration files
+.env
+config.js
+
+# Node.js files
+node_modules/
+npm-debug.log
