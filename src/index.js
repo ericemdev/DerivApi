@@ -16,7 +16,7 @@ async function main() {
         console.log('Valid symbols:', validSymbols);
 
         // Example: Validate a symbol for trading
-        const selectedSymbol = 'OTC_SPC'; // Example symbol
+        const selectedSymbol = 'OTC_SPC';
         if (!validSymbols.includes(selectedSymbol)) {
             throw new Error(`Symbol ${selectedSymbol} is not valid. Please use one of the following valid symbols: ${validSymbols.join(', ')}`);
         } else {
@@ -26,7 +26,40 @@ async function main() {
             const tickerInfo = await Deriv.fetchTicker(selectedSymbol);
             console.log(`Latest price for ${selectedSymbol}:`, tickerInfo);
 
-            // Additional trading setup or execution logic goes here
+        // fetch contract details
+            const contractDetails = await Deriv.send({ contracts_for: selectedSymbol });
+            const availableContracts = contractDetails?.contracts_for?.available || [];
+            if (availableContracts.length === 0) {
+                throw new Error(`No contracts available for symbol ${selectedSymbol}`);
+            }
+
+        //     fetch valid durations
+            const validDurations = availableContracts.map(contract => contract.min_contract_duration);
+            const selectedDuration = validDurations[0];
+
+            // Parse duration
+            const durationValue = parseInt(selectedDuration.match(/\d+/)?.[0], 10);
+            const durationUnit = selectedDuration.match(/[a-zA-Z]+/)?.[0].toLowerCase();
+
+            // Validate duration unit
+            const validUnits = ['d', 'm', 's', 'h', 't']; // Valid units
+            if (!validUnits.includes(durationUnit)) {
+                throw new Error(`Invalid duration unit: ${durationUnit}`);
+            }
+
+            console.log(`Selected contract type: CALL`);
+            console.log(`Selected duration: ${durationValue} ${durationUnit}`);
+
+            // Place order
+            const orderResponse = await Deriv.placeOrder(
+                selectedSymbol,
+                10,
+                durationValue,
+                durationUnit,
+                'CALL'
+            );
+            console.log('Order placed successfully:', orderResponse);
+
         }
         
     } catch (error) {

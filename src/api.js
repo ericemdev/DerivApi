@@ -92,6 +92,32 @@ class DerivExchange {
         }
     }
 
+    // place order
+    async placeOrder(symbol, amount, duration, durationUnit, contractType) {
+        console.log('Placing order...');
+        try {
+            const request = {
+                buy: 1,
+                price: amount,
+                parameters: {
+                    symbol,
+                    currency: 'USD',
+                    duration,
+                    duration_unit: durationUnit,
+                    amount,
+                    basis: 'stake',
+                    contract_type: contractType
+                }
+            };
+
+            const response = await this.send(request);
+            console.log('Order response:', response);
+            return response;
+        } catch (error) {
+            console.error('Failed to place order:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = DerivExchange;
