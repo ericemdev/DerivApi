@@ -33,7 +33,7 @@ class DerivExchange {
                     return reject(error);
                 }
 
-                // Listen for response
+                // Listen for the rensponse
                 this.ws.once('message', (data) => {
                     const response = JSON.parse(data);
                     if (response.error) {
@@ -81,21 +81,105 @@ class DerivExchange {
     }
 
 
-    // fetchTicker  sends a request to the server to fetch the latest price for a given symbol
+    // updated fetchTicker method to handle existing subscriptions
     async fetchTicker(symbol) {
         try {
+            // Unsubscribe first if already subscribed
+            await this.send({ forget_all: 'ticks' });
+
             const response = await this.send({ ticks: symbol });
-            return response; 
+            const price = response.tick?.quote;
+            console.log(`Fetched price for ${symbol}:`, price);
+
+            return price;
         } catch (error) {
             console.error(`Error fetching ticker for ${symbol}:`, error);
             throw error;
         }
     }
 
-    // place order
-    async placeOrder(symbol, amount, duration, durationUnit, contractType) {
-        console.log('Placing order...');
+
+    async fetchOpenMarkets() {
         try {
+            const response = await this.send({ active_symbols: 'brief' });
+            return response.active_symbols;
+        } catch (error) {
+            console.error('Failed to fetch open markets:', error);
+            throw error;
+        }
+    }
+
+    // fetchTradeTypesFromSymbols sends a request to the server to fetch trade types derived from active symbols
+    async fetchTradeTypesFromSymbols() {
+        try {
+            const response = await this.send({ active_symbols: 'brief' });
+            const symbols = response.active_symbols;
+
+            const tradeTypes = symbols.map((symbol) => ({
+                market: symbol.market,
+                submarket: symbol.submarket,
+                symbol: symbol.symbol,
+                display_name: symbol.display_name,
+            }));
+
+            // Sort trade types by market, submarket, or display_name
+            const sortedTradeTypes = tradeTypes.sort((a, b) => {
+                if (a.market === b.market) {
+                    if (a.submarket === b.submarket) {
+                        return a.display_name.localeCompare(b.display_name);
+                    }
+                    return a.submarket.localeCompare(b.submarket);
+                }
+                return a.market.localeCompare(b.market);
+            });
+
+            return sortedTradeTypes;
+        } catch (error) {
+            console.error('Failed to fetch trade types:', error);
+            throw error;
+        }
+    }
+
+    // Fetch contracts available for a symbol
+    async fetchContractsForSymbol(symbol) {
+        try {
+            const response = await this.send({ contracts_for: symbol });
+            const availableContracts = response.contracts_for?.available || [];
+
+            const contracts = availableContracts.map((contract) => ({
+                contractType: contract.contract_type,
+                minDuration: contract.min_contract_duration,
+                maxDuration: contract.max_contract_duration,
+                barriers: contract.barrier_category,
+            }));
+
+            console.log(`Contracts for Symbol ${symbol}:`, contracts);
+            return contracts;
+        } catch (error) {
+            console.error('Failed to fetch contracts for symbol:', error);
+            throw error;
+        }
+    }
+
+        // place order for a symbol
+    async placeOrder({ symbol, amount, duration, durationUnit, contractType, tp = null, sl = null }) {
+        try {
+            // Fetch the current market price
+            const currentPrice = await this.fetchTicker(symbol);
+            console.log(`Current Price: ${currentPrice}`);
+
+            // Calculate TP and SL based on percentage or fixed value
+            const tpPrice = tp && tp.includes('%')
+                ? currentPrice * (1 + parseFloat(tp.replace('%', '')) / 100)
+                : tp ? parseFloat(tp) : null;
+
+            const slPrice = sl && sl.includes('%')
+                ? currentPrice * (1 - parseFloat(sl.replace('%', '')) / 100)
+                : sl ? parseFloat(sl) : null;
+
+            console.log(`Take-Profit Price: ${tpPrice}, Stop-Loss Price: ${slPrice}`);
+
+            // Construct the order request
             const request = {
                 buy: 1,
                 price: amount,
@@ -106,17 +190,57 @@ class DerivExchange {
                     duration_unit: durationUnit,
                     amount,
                     basis: 'stake',
-                    contract_type: contractType
-                }
+                    contract_type: contractType,
+                },
             };
 
+            // Add TP and SL to the request if defined
+            if (tpPrice) request.parameters.barrier = tpPrice.toFixed(2);
+            if (slPrice) request.parameters.barrier2 = slPrice.toFixed(2);
+
+            console.log('Order Request:', JSON.stringify(request, null, 2));
+
+            // Send the order request to the API
             const response = await this.send(request);
-            console.log('Order response:', response);
+            console.log('Order Response:', JSON.stringify(response, null, 2));
+
             return response;
         } catch (error) {
             console.error('Failed to place order:', error);
             throw error;
         }
+    }
+
+
+
+    async fetchOpenPositions() {
+        try {
+            const response = await this.send({ open_positions: 1 });
+            return response.open_positions || [];
+        } catch (error) {
+            console.error('Failed to fetch open positions:', error);
+            throw error;
+        }
+    }
+
+    async fetchPortfolio() {
+        try {
+            const response = await this.send({ portfolio: 1 });
+            return response.portfolio || [];
+        } catch (error) {
+            console.error('Failed to fetch portfolio:', error);
+            throw error;
+        }
+    }
+
+
+    keepConnectionAlive() {
+        setInterval(() => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ ping: 1 }));
+                console.log('Sent ping to keep connection alive.');
+            }
+        }, 30000);
     }
 }
 

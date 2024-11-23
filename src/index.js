@@ -6,58 +6,80 @@ async function main() {
         await Deriv.connect();
         await Deriv.authorize();
 
-        // Fetch balance
+
         const balance = await Deriv.fetchBalance();
         console.log('Balance:', balance);
-        
+
         // Fetch active symbols to validate
         const symbolResponse = await Deriv.send({active_symbols: 'brief'});
         const validSymbols = symbolResponse?.active_symbols?.map(symbol => symbol.symbol) || [];
         console.log('Valid symbols:', validSymbols);
 
-        // Example: Validate a symbol for trading
+        // fetch Trade types derived from active symbols
+        const tradeTypes = await Deriv.fetchTradeTypesFromSymbols();
+        console.log ('Trade types:', tradeTypes);
+
+        const openMarkets = await Deriv.fetchOpenMarkets();
+        console.log('Open markets:', openMarkets);
+
+        const forexTrades = tradeTypes.filter((trade) => trade.market === 'forex');
+        console.log('Forex Trades:', forexTrades);
+
+
         const selectedSymbol = 'OTC_SPC';
+
         if (!validSymbols.includes(selectedSymbol)) {
             throw new Error(`Symbol ${selectedSymbol} is not valid. Please use one of the following valid symbols: ${validSymbols.join(', ')}`);
         } else {
             console.log(`Symbol ${selectedSymbol} is valid and ready for trading.`);
 
-            // Fetch additional details or prepare trade logic
             const tickerInfo = await Deriv.fetchTicker(selectedSymbol);
             console.log(`Latest price for ${selectedSymbol}:`, tickerInfo);
 
-        // fetch contract details
             const contractDetails = await Deriv.send({ contracts_for: selectedSymbol });
             const availableContracts = contractDetails?.contracts_for?.available || [];
             if (availableContracts.length === 0) {
                 throw new Error(`No contracts available for symbol ${selectedSymbol}`);
             }
 
-        //     fetch valid durations
+
             const validDurations = availableContracts.map(contract => contract.min_contract_duration);
-            const selectedDuration = validDurations[0];
+            let selectedDuration = validDurations[0];
 
-            // Parse duration
-            const durationValue = parseInt(selectedDuration.match(/\d+/)?.[0], 10);
-            const durationUnit = selectedDuration.match(/[a-zA-Z]+/)?.[0].toLowerCase();
 
-            // Validate duration unit
-            const validUnits = ['d', 'm', 's', 'h', 't']; // Valid units
+            let durationValue = parseInt(selectedDuration.match(/\d+/)?.[0], 10);
+            let durationUnit = selectedDuration.match(/[a-zA-Z]+/)?.[0].toLowerCase();
+
+
+            const validUnits = ['d', 'm', 's', 'h', 't'];
             if (!validUnits.includes(durationUnit)) {
                 throw new Error(`Invalid duration unit: ${durationUnit}`);
+            }
+
+            // check if duration leads to a weekend or holiday and adjust accordingly
+            if (durationUnit === 'd') {
+                const today = new Date();
+                const expiryDate = new Date(today);
+                expiryDate.setDate(today.getDate() + durationValue);
+
+                if (expiryDate.getDay() === 6) {
+                    durationValue += 2;
+                } else if (expiryDate.getDay() === 0) {
+                    durationValue += 1;
+                }
             }
 
             console.log(`Selected contract type: CALL`);
             console.log(`Selected duration: ${durationValue} ${durationUnit}`);
 
             // Place order
-            const orderResponse = await Deriv.placeOrder(
-                selectedSymbol,
-                10,
-                durationValue,
+            const orderResponse = await Deriv.placeOrder({
+                symbol: selectedSymbol,
+                amount: 8.50,
+                duration: durationValue,
                 durationUnit,
-                'CALL'
-            );
+                contractType: 'CALL',
+            });
             console.log('Order placed successfully:', orderResponse);
 
         }
