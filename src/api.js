@@ -2,9 +2,10 @@ const WebSocket = require('ws');
 const { APP_ID, API_TOKEN } = require('../config');
 
 
-// class Deriv Exchange creates a new instance of the WebSocket class
-// the constructor method is called when a new instance of the class is created
-// authorize method sends an authorization message to the server with the API token as the value of the authorization key
+/***class Deriv Exchange creates a new instance of the WebSocket class
+the constructor method is called when a new instance of the class is created
+authorize method sends an authorization message to the server with the API token as the value of the authorization key
+ */
 class DerivExchange {
     constructor() {
         this.ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`);
@@ -99,12 +100,12 @@ class DerivExchange {
     }
 
 
-    async fetchOpenMarkets() {
+    async fetchPortfolio() {
         try {
-            const response = await this.send({ active_symbols: 'brief' });
-            return response.active_symbols;
+            const response = await this.send({ portfolio: 1 });
+            return response.portfolio || [];
         } catch (error) {
-            console.error('Failed to fetch open markets:', error);
+            console.error('Failed to fetch portfolio:', error);
             throw error;
         }
     }
@@ -212,26 +213,6 @@ class DerivExchange {
     }
 
 
-
-    async fetchOpenPositions() {
-        try {
-            const response = await this.send({ open_positions: 1 });
-            return response.open_positions || [];
-        } catch (error) {
-            console.error('Failed to fetch open positions:', error);
-            throw error;
-        }
-    }
-
-    async fetchPortfolio() {
-        try {
-            const response = await this.send({ portfolio: 1 });
-            return response.portfolio || [];
-        } catch (error) {
-            console.error('Failed to fetch portfolio:', error);
-            throw error;
-        }
-    }
 
 
     keepConnectionAlive() {
