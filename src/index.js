@@ -5,6 +5,9 @@ async function fetchInitialData(Deriv) {
     const balance = await Deriv.fetchBalance();
     console.log('Balance:', balance);
 
+    const activeSymbols = await fetchActiveSymbols(Deriv);
+    console.log('Active symbols:', activeSymbols);
+
     const portfolio = await Deriv.fetchPortfolio();
     console.log('Portfolio:', portfolio);
 
@@ -14,11 +17,43 @@ async function fetchInitialData(Deriv) {
     return { balance, portfolio, tradeTypes };
 }
 
+async function fetchActiveSymbols(Deriv) {
+    try {
+        const response = await Deriv.send({ active_symbols: 'brief' });
+        if (response.active_symbols) {
+            console.log('Active symbols:', response.active_symbols);
+            return response.active_symbols.map((symbol) => symbol.symbol);
+        } else {
+            throw new Error('No active symbols found.');
+        }
+    } catch (e) {
+        console.error('Error fetching active symbols:', e.message);
+        throw e;
+    }
+}
+
 
 async function getValidContractDetails(Deriv, symbol) {
-    const contracts = await Deriv.fetchContractsForSymbol(symbol);
-    console.log('Available contracts:', contracts);
-    return contracts;
+    try {
+        const contracts = await Deriv.fetchContractsForSymbol(symbol);
+        if (!contracts || contracts.length === 0) {
+            throw new Error(`No contracts available for symbol ${symbol}`);
+        }
+
+        // Parse duration value and unit safely
+        contracts.forEach((contract) => {
+            if (!contract.minDuration || typeof contract.minDuration !== 'string') {
+                console.warn(`Missing or invalid minDuration for contract:`, contract);
+                contract.minDuration = '1d';
+            }
+        });
+
+        console.log('Available contracts:', contracts);
+        return contracts;
+    } catch (error) {
+        console.error(`Error fetching contract details for symbol ${symbol}:`, error.message);
+        throw error;
+    }
 }
 
 
@@ -28,7 +63,7 @@ async function monitorPriceAndPlaceOrder(Deriv, symbol, conditions, orderDetails
         const response = JSON.parse(data);
         if (response.tick) {
             const currentPrice = response.tick.quote;
-            console.log(`Current price for ${symbol}:`, currentPrice);
+            console.log(`Current price for ${symbol}: ${currentPrice}`);
 
             if (conditions.every((cond) => cond(currentPrice))) {
                 console.log('All conditions met. Placing order...');
@@ -38,7 +73,6 @@ async function monitorPriceAndPlaceOrder(Deriv, symbol, conditions, orderDetails
     });
 }
 
-//adjust duration for weekends
 function adjustDurationForWeekends(duration, unit) {
     if (unit !== 'd') return duration;
 
@@ -56,36 +90,90 @@ function adjustDurationForWeekends(duration, unit) {
 
 async function main() {
     try {
-        console.log('Starting application...');
+        console.log('my deriv app api is trying to run...');
         await Deriv.connect();
         await Deriv.authorize();
+        Deriv.keepConnectionAlive();
+
 
         const { tradeTypes } = await fetchInitialData(Deriv);
-        console.log('Trade Types:', tradeTypes);
 
-        // random valid symbol to test my code
-        const symbol = 'R_100';
-        const contracts = await getValidContractDetails(Deriv, symbol);
-        console.log('Contracts:', contracts);
+        const selectedSymbol = 'OTC_SPC';
+        const validSymbols = tradeTypes.map((trade) => trade.symbol);
 
-        const contract = contracts[0];
-        const duration = adjustDurationForWeekends(5, 'd');
-        const amount = 1;
-        const orderDetails = {
-            symbol,
-            contract_type: contract.contract_type,
-            duration,
-            amount,
-        };
+        if (!validSymbols.includes(selectedSymbol)) {
+            throw new Error(`Invalid symbol: ${selectedSymbol}`);
+        }
 
-        const conditions = [
-            (price) => price > 1.2,
-            (price) => price < 1.4,
-        ];
+        const tickerInfo = await Deriv.fetchTicker(selectedSymbol);
+        console.log(`Latest price for ${selectedSymbol}:`, tickerInfo);
 
-        monitorPriceAndPlaceOrder(Deriv, symbol, conditions, orderDetails);
+        const contracts = await getValidContractDetails(Deriv, selectedSymbol);
+
+        if (contracts.length === 0) {
+            throw new Error(`No contracts available for symbol ${selectedSymbol}`);
+        }
+
+        let selectedDuration = contracts[0].minDuration;
+        let durationValue = parseInt(selectedDuration.match(/\d+/)?.[0], 10);
+        let durationUnit = selectedDuration.match(/[a-zA-Z]+/)?.[0].toLowerCase();
+        console.log(`Parsed duration value: ${durationValue}, unit: ${durationUnit}`);
+
+        const validUnits = ['d', 'm', 's', 'h', 't'];
+        if (!validUnits.includes(durationUnit)) {
+            throw new Error(`Invalid duration unit: ${durationUnit}`);
+        }
+
+        durationValue = adjustDurationForWeekends(durationValue, durationUnit);
+
+        console.log(`Selected duration: ${durationValue} ${durationUnit}`);
+
+        const orderResponse = await Deriv.placeOrder({
+            symbol: selectedSymbol,
+            amount: 8.5,
+            duration: durationValue,
+            durationUnit,
+            contractType: 'CALL',
+            leverage : 10,
+        });
+        console.log('Order placed successfully:', orderResponse);
+
+        const modifyOrderResponse = await Deriv.modifyOrder({
+            contractId: 263800758628,
+            tp: '15%',
+            sl: '10%',
+        });
+        console.log ('trying to modify order');
+        console.log('Order modified successfully:', modifyOrderResponse);
+
+        await monitorPriceAndPlaceOrder(Deriv, selectedSymbol, [(price) => price > 100], {
+            symbol: selectedSymbol,
+            amount: 10,
+            duration: durationValue,
+            durationUnit,
+            contractType: 'CALL',
+            leverage : 10,
+        });
+        console.log('Conditional order monitoring started.');
+
+        const openOrders = await Deriv.fetchPortfolio();
+        const criteria = (order) => order.symbol === selectedSymbol && order.contract_type === 'CALL';
+        const specificOrder = Deriv.findOrder(openOrders, criteria);
+
+        if (!specificOrder) {
+            console.log('Order not found based on the provided criteria.');
+            return;
+        }
+
+        const closeResponse = await Deriv.closePosition(specificOrder.contract_id);
+        console.log('Position closed successfully:', closeResponse);
+
+        const cancelResponse = await Deriv.cancelOrder(specificOrder.contract_id);
+        console.log('Order canceled successfully:', cancelResponse);
+
+
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error in main:', error);
     }
 }
 

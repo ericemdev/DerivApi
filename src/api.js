@@ -103,7 +103,9 @@ class DerivExchange {
     async fetchPortfolio() {
         try {
             const response = await this.send({ portfolio: 1 });
-            return response.portfolio || [];
+            const openOrders = response.portfolio?.contracts || [];
+            console.log('Open Orders:', openOrders);
+            return openOrders;
         } catch (error) {
             console.error('Failed to fetch portfolio:', error);
             throw error;
@@ -162,14 +164,39 @@ class DerivExchange {
         }
     }
 
-        // place order for a symbol
+        /*** placing my  order for a symbol
+              -validate symbol
+              -set leverage if specified
+              -Fetch the current market price
+              -Calculate TP and SL based on percentage or fixed value
+              -Construct the order request
+              -Add TP and SL to the request if defined
+              -Send the order request to the API
+         */
     async placeOrder({ symbol, amount, duration, durationUnit, contractType, tp = null, sl = null }) {
         try {
-            // Fetch the current market price
+
+            const validSymbolsResponse = await this.send({ active_symbols: 'brief' });
+            const validSymbols = validSymbolsResponse?.active_symbols?.map(s => s.symbol) || [];
+
+            if (!validSymbols.includes(symbol)) {
+                throw new Error(`Invalid symbol: ${symbol}`);
+            }
+
+
+            if (leverage) {
+                const leverageResponse =await this.send ({
+                    set_leverage:{
+                        leverage,
+                        symbol
+                    }
+                });
+                console.log(`Leverage set for ${symbol}: ${leverageResponse}`);
+            }
+
             const currentPrice = await this.fetchTicker(symbol);
             console.log(`Current Price: ${currentPrice}`);
 
-            // Calculate TP and SL based on percentage or fixed value
             const tpPrice = tp && tp.includes('%')
                 ? currentPrice * (1 + parseFloat(tp.replace('%', '')) / 100)
                 : tp ? parseFloat(tp) : null;
@@ -180,7 +207,7 @@ class DerivExchange {
 
             console.log(`Take-Profit Price: ${tpPrice}, Stop-Loss Price: ${slPrice}`);
 
-            // Construct the order request
+
             const request = {
                 buy: 1,
                 price: amount,
@@ -195,13 +222,11 @@ class DerivExchange {
                 },
             };
 
-            // Add TP and SL to the request if defined
             if (tpPrice) request.parameters.barrier = tpPrice.toFixed(2);
             if (slPrice) request.parameters.barrier2 = slPrice.toFixed(2);
 
             console.log('Order Request:', JSON.stringify(request, null, 2));
 
-            // Send the order request to the API
             const response = await this.send(request);
             console.log('Order Response:', JSON.stringify(response, null, 2));
 
@@ -213,13 +238,99 @@ class DerivExchange {
     }
 
 
+    // Modify existing order for a symbol
+    async modifyOrder({ contractId, tp = null, sl = null }) {
+        try {
+            // Fetch current details of the contract
+            const contractDetails = await this.send({ contract_info: contractId });
+            const currentPrice = contractDetails?.current_spot;
+
+            // check if market is open
+            const marketStatus = await this.send({contract_info: contractId});
+            const isMarketOpen = marketStatus?.active_symbols?.some(symbol => symbol.symbol === contractDetails.symbol && symbol.exchange_is_open);
+
+            if (!isMarketOpen) {
+                throw new Error(`Market is closed for symbo ${contractDetails.symbol}. Cannot modify order.`);
+            }
+            // Calculate new TP and SL based on percentage or fixed value
+            const tpPrice = tp && tp.includes('%')
+                ? currentPrice * (1 + parseFloat(tp.replace('%', '')) / 100)
+                : tp ? parseFloat(tp) : null;
+
+            const slPrice = sl && sl.includes('%')
+                ? currentPrice * (1 - parseFloat(sl.replace('%', '')) / 100)
+                : sl ? parseFloat(sl) : null;
+
+            console.log(`New Take-Profit Price: ${tpPrice}, New Stop-Loss Price: ${slPrice}`);
+
+            // Construct the modification request
+            const request = {
+                contract_id: contractId,
+                ...(tpPrice && { barrier: tpPrice.toFixed(2) }),
+                ...(slPrice && { barrier2: slPrice.toFixed(2) })
+            };
+
+            // Send the modification request to the API
+            const response = await this.send({ modify_contract: request });
+            console.log('Order Modification Response:', JSON.stringify(response, null, 2));
+
+            return response;
+        } catch (error) {
+            console.error('Failed to modify order:', error);
+            throw error;
+        }
+    }
+
+    // Find a specific order based on criteria
+    findOrder(orders, criteria) {
+        return orders.find(criteria);
+    }
+
+    async closePosition(contractId) {
+        try {
+            console.log(`Attempting to close position with contract ID: ${contractId}`);
+
+            // Construct the close position request
+            const request = { sell: contractId, price: 0 };
+
+            // Send the close position request to the API
+            const response = await this.send(request);
+            console.log('Position Close Response:', JSON.stringify(response, null, 2));
+
+            return response;
+        } catch (error) {
+            console.error('Failed to close position:', error);
+            throw error;
+        }
+    }
 
 
+// Function to cancel a specific order based on contract ID
+    async cancelOrder(contractId) {
+        try {
+            console.log(`Attempting to cancel order with contract ID: ${contractId}`);
+
+            const request = {
+                sell: contractId,
+            };
+
+            const response = await this.send(request);
+            console.log('Order Cancellation Response:', JSON.stringify(response, null, 2));
+
+            return response;
+        } catch (error) {
+            console.error('Failed to cancel order:', error);
+            throw error;
+        }
+    }
+
+
+    // pinging....
     keepConnectionAlive() {
         setInterval(() => {
             if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify({ ping: 1 }));
-                console.log('Sent ping to keep connection alive.');
+                console.log('pinging....');
             }
         }, 30000);
     }
