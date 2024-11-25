@@ -58,6 +58,7 @@ async function getValidContractDetails(Deriv, symbol) {
 
 
 async function monitorPriceAndPlaceOrder(Deriv, symbol, conditions, orderDetails) {
+    await Deriv.unsubscribeAllTicks();
     await Deriv.send({ ticks: symbol });
     Deriv.ws.on('message', (data) => {
         const response = JSON.parse(data);
@@ -97,6 +98,18 @@ async function main() {
 
 
         const { tradeTypes } = await fetchInitialData(Deriv);
+        const command = 'buy 10 OTC_SPC';
+        const params ={
+            Q: 10,
+            P: null,
+            TP: '15%',
+            SL: '10%',
+            T: 1,
+            L: 10,
+        };
+
+        // const response = await Deriv.placeOrder(command, params);
+        // console.log('Order placed successfully:', response);
 
         const selectedSymbol = 'OTC_SPC';
         const validSymbols = tradeTypes.map((trade) => trade.symbol);
@@ -133,7 +146,7 @@ async function main() {
             amount: 8.5,
             duration: durationValue,
             durationUnit,
-            contractType: 'CALL',
+            contractType: 'PUT',
         });
         console.log('Order placed successfully:', orderResponse);
 

@@ -100,6 +100,18 @@ class DerivExchange {
         }
     }
 
+    async unsubscribeAllTicks() {
+        try {
+            const response = await this.send({ forget_all: 'ticks' });
+            console.log('Unsubscribed from all tick streams:', response);
+            return response;
+        } catch (error) {
+            console.error('Failed to unsubscribe from tick streams:', error);
+            throw error;
+        }
+    }
+
+
 
     async fetchPortfolio() {
         try {
@@ -164,6 +176,50 @@ class DerivExchange {
             throw error;
         }
     }
+    async processCommand(command, params) {
+        try {
+            const [action, symbol] = command.split(" ");
+            switch (action.toLowerCase()) {
+                case 'buy':
+                case '1':
+                case 'long':
+                    return await this.placeOrder({
+                        symbol,
+                        amount: params.Q,
+                        price: params.P,
+                        duration: params.T,
+                        durationUnit: 'd',
+                        contractType: 'CALL',
+                        tp: params.TP,
+                        sl: params.SL,
+                        leverage: params.L,
+                    });
+                case 'sell':
+                case '-1':
+                case 'short':
+                    return await this.placeOrder({
+                        symbol,
+                        amount: params.Q,
+                        price: params.P,
+                        duration: params.T,
+                        durationUnit: 'd',
+                        contractType: 'PUT',
+                        tp: params.TP,
+                        sl: params.SL,
+                        leverage: params.L,
+                    });
+                case 'cancel':
+                    return await this.cancelOrder(params.contractId);
+                case 'unsubscribe':
+                    return await this.unsubscribeAllTicks();
+                default:
+                    throw new Error(`Unknown command: ${action}`);
+            }
+        } catch (error) {
+            console.error('Failed to process command:', error);
+            throw error;
+        }
+    }
 
         /*** placing my  order for a symbol
               -validate symbol
@@ -188,8 +244,7 @@ class DerivExchange {
                     symbol: symbol,
                 };
 
-                console.log('Requesting price with payload:', JSON.stringify(proposalRequest, null, 2)); // Log the request payload
-
+                console.log('Requesting price with payload:', JSON.stringify(proposalRequest, null, 2));
                 const proposalResponse = await this.send(proposalRequest);
                 console.log('Price Proposal Response:', JSON.stringify(proposalResponse, null, 2));
 
@@ -205,7 +260,7 @@ class DerivExchange {
                     price: amount.toString(),
                 };
 
-                console.log('Placing order with payload:', JSON.stringify(buyRequest, null, 2)); // Log the request payload
+                console.log('Placing order with payload:', JSON.stringify(buyRequest, null, 2));
 
                 const response = await this.send(buyRequest);
                 console.log('Order placed:', JSON.stringify(response, null, 2));
@@ -275,10 +330,7 @@ class DerivExchange {
         try {
             console.log(`Attempting to close position with contract ID: ${contractId}`);
 
-            // Construct the close position request
             const request = { sell: contractId, price: 0 };
-
-            // Send the close position request to the API
             const response = await this.send(request);
             console.log('Position Close Response:', JSON.stringify(response, null, 2));
 
