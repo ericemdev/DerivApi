@@ -7,13 +7,21 @@ class DerivExchange {
     }
 
     connect() {
-        console.log('Connecting to Deriv WebSocket...');
+        console.log('Connecting to Deriv WebSocket...💥');
         return new Promise((resolve, reject) => {
             this.ws.on('open', () => {
                 console.log('Connected to Deriv WebSocket');
                 resolve();
             });
-            this.ws.on('error', reject);
+
+            this.ws.on('error', (error) => {
+                console.error('WebSocket error:', error);
+                reject(error);
+            });
+
+            this.ws.on('close', (code, reason) => {
+                console.log(`WebSocket closed. Code: ${code}, Reason: ${reason}`);
+            });
         });
     }
 
@@ -94,14 +102,65 @@ class DerivExchange {
         return await this.send(buyRequest);
     }
 
+    async sellContract(contractId, price) {
+        const sellRequest = {
+            sell: contractId,
+            price: price,
+        };
+
+        try {
+            const sellResponse = await this.send(sellRequest);
+            console.log('Sell response:', sellResponse);
+            return sellResponse;
+        } catch (error) {
+            console.error('Error selling contract:', error.message);
+            throw error;
+        }
+    }
+
+    createContractUpdateRequest(contractId, tp = null, sl = null) {
+        const request = {
+            contract_update: 1,
+            contract_id: contractId,
+        };
+
+        if (tp || sl) {
+            request.limit_order = {};
+            if (tp) request.limit_order.take_profit = parseFloat(tp);
+            if (sl) request.limit_order.stop_loss = parseFloat(sl);
+        }
+
+        return request;
+    }
+
+
+    async modifyOrder(contractId, tp = null, sl = null) {
+        try {
+            console.log(`Attempting to modify order for contract ID: ${contractId}`);
+            const modifyRequest = this.createContractUpdateRequest(contractId, tp, sl);
+            console.log('Generated request:', modifyRequest);
+            const response = await this.send(modifyRequest);
+            console.log('Order Modification Response:', response);
+            return response;
+        } catch (error) {
+            console.error('Failed to modify order:', error.message);
+            throw error;
+        }
+    }
+
+
     async unsubscribeAllTicks() {
         return await this.send({ forget_all: 'ticks' });
     }
+
 
     keepConnectionAlive() {
         setInterval(() => {
             if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify({ ping: 1 }));
+                console.log('Pinging...🏓');
+            } else {
+                console.log('WebSocket is not open. Cannot send ping. ❌');
             }
         }, 30000);
     }

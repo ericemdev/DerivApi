@@ -53,6 +53,7 @@ function adjustDurationForWeekends(duration, unit) {
     return duration;
 }
 
+
 // Main function
 async function main() {
     try {
@@ -84,7 +85,6 @@ async function main() {
         }
         durationValue = adjustDurationForWeekends(durationValue, durationUnit);
 
-        // Place an order
         const orderResponse = await Deriv.placeOrder({
             symbol: selectedSymbol,
             amount: 8.5,
@@ -94,6 +94,36 @@ async function main() {
         });
         console.log('Order placed successfully:', orderResponse);
 
+
+        const portfolio = await Deriv.fetchPortfolio();
+        console.log('Portfolio fetched:', portfolio);
+
+        const contractId = portfolio[0]?.contract_id;
+        console.log('Selected Contract:', JSON.stringify(portfolio[0], null, 2));
+
+        if (!contractId) {
+            console.error('Contract ID not found for the selected contract.');
+            return;
+        }
+
+        // Modify the selected order
+        const modifyResponse = await Deriv.modifyOrder(
+            contractId,
+            '150.0', // Replace with the desired take-profit value
+            '100.0'  // Replace with the desired stop-loss value
+        );
+        console.log('Order modified successfully:', modifyResponse);
+
+        console.log('Order modified successfully:', modifyResponse);
+
+        // Sell the contract
+        // const contractId = orderResponse.buy?.contract_id;
+        // if (contractId) {
+        //     const sellResponse = await Deriv.sellContract(contractId, 10);
+        //     console.log('Sell response:', sellResponse);
+        // } else {
+        //     console.log('No contract ID found for the buy order.');
+        // }
         await Deriv.unsubscribeAllTicks();
     } catch (error) {
         console.error('Error in main:', error.message);
