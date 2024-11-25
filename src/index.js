@@ -134,17 +134,10 @@ async function main() {
             duration: durationValue,
             durationUnit,
             contractType: 'CALL',
-            leverage : 10,
         });
         console.log('Order placed successfully:', orderResponse);
 
-        const modifyOrderResponse = await Deriv.modifyOrder({
-            contractId: 263800758628,
-            tp: '15%',
-            sl: '10%',
-        });
-        console.log ('trying to modify order');
-        console.log('Order modified successfully:', modifyOrderResponse);
+
 
         await monitorPriceAndPlaceOrder(Deriv, selectedSymbol, [(price) => price > 100], {
             symbol: selectedSymbol,

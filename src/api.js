@@ -36,6 +36,7 @@ class DerivExchange {
 
                 // Listen for the rensponse
                 this.ws.once('message', (data) => {
+
                     const response = JSON.parse(data);
                     if (response.error) {
                         console.error('Authorization failed:', response.error);
@@ -173,86 +174,69 @@ class DerivExchange {
               -Add TP and SL to the request if defined
               -Send the order request to the API
          */
-    async placeOrder({ symbol, amount, duration, durationUnit, contractType, tp = null, sl = null }) {
-        try {
-
-            const validSymbolsResponse = await this.send({ active_symbols: 'brief' });
-            const validSymbols = validSymbolsResponse?.active_symbols?.map(s => s.symbol) || [];
-
-            if (!validSymbols.includes(symbol)) {
-                throw new Error(`Invalid symbol: ${symbol}`);
-            }
-
-
-            if (leverage) {
-                const leverageResponse =await this.send ({
-                    set_leverage:{
-                        leverage,
-                        symbol
-                    }
-                });
-                console.log(`Leverage set for ${symbol}: ${leverageResponse}`);
-            }
-
-            const currentPrice = await this.fetchTicker(symbol);
-            console.log(`Current Price: ${currentPrice}`);
-
-            const tpPrice = tp && tp.includes('%')
-                ? currentPrice * (1 + parseFloat(tp.replace('%', '')) / 100)
-                : tp ? parseFloat(tp) : null;
-
-            const slPrice = sl && sl.includes('%')
-                ? currentPrice * (1 - parseFloat(sl.replace('%', '')) / 100)
-                : sl ? parseFloat(sl) : null;
-
-            console.log(`Take-Profit Price: ${tpPrice}, Stop-Loss Price: ${slPrice}`);
-
-
-            const request = {
-                buy: 1,
-                price: amount,
-                parameters: {
-                    symbol,
-                    currency: 'USD',
-                    duration,
-                    duration_unit: durationUnit,
-                    amount,
+        async placeOrder({ symbol, amount, duration, durationUnit, contractType }) {
+            try {
+                // Request price proposal
+                const proposalRequest = {
+                    proposal: 1,
+                    amount: amount.toString(),
                     basis: 'stake',
                     contract_type: contractType,
-                },
-            };
+                    currency: 'USD',
+                    duration: duration.toString(),
+                    duration_unit: durationUnit,
+                    symbol: symbol,
+                };
 
-            if (tpPrice) request.parameters.barrier = tpPrice.toFixed(2);
-            if (slPrice) request.parameters.barrier2 = slPrice.toFixed(2);
+                console.log('Requesting price with payload:', JSON.stringify(proposalRequest, null, 2)); // Log the request payload
 
-            console.log('Order Request:', JSON.stringify(request, null, 2));
+                const proposalResponse = await this.send(proposalRequest);
+                console.log('Price Proposal Response:', JSON.stringify(proposalResponse, null, 2));
 
-            const response = await this.send(request);
-            console.log('Order Response:', JSON.stringify(response, null, 2));
+                if (!proposalResponse.proposal) {
+                    throw new Error(`Failed to get price proposal: ${JSON.stringify(proposalResponse)}`);
+                }
 
-            return response;
-        } catch (error) {
-            console.error('Failed to place order:', error);
-            throw error;
+                const proposalId = proposalResponse.proposal.id;
+
+                // Buy contract using proposal ID
+                const buyRequest = {
+                    buy: proposalId,
+                    price: amount.toString(),
+                };
+
+                console.log('Placing order with payload:', JSON.stringify(buyRequest, null, 2)); // Log the request payload
+
+                const response = await this.send(buyRequest);
+                console.log('Order placed:', JSON.stringify(response, null, 2));
+
+                return response;
+            } catch (error) {
+                console.error('Failed to place order:', error.message);
+                throw error;
+            }
         }
-    }
 
 
     // Modify existing order for a symbol
     async modifyOrder({ contractId, tp = null, sl = null }) {
         try {
+            console.log(`Attempting to modify order with contract ID: ${contractId}`);
+
             // Fetch current details of the contract
             const contractDetails = await this.send({ contract_info: contractId });
+            console.log('Fetched contract details:', contractDetails);
             const currentPrice = contractDetails?.current_spot;
 
-            // check if market is open
-            const marketStatus = await this.send({contract_info: contractId});
+            // Check if the market is open
+            const marketStatus = await this.send({ active_symbols: 'brief' });
             const isMarketOpen = marketStatus?.active_symbols?.some(symbol => symbol.symbol === contractDetails.symbol && symbol.exchange_is_open);
+            console.log(`Market status for ${contractDetails.symbol}: ${isMarketOpen ? 'Open' : 'Closed'}`);
 
             if (!isMarketOpen) {
-                throw new Error(`Market is closed for symbo ${contractDetails.symbol}. Cannot modify order.`);
+                throw new Error(`Market for symbol ${contractDetails.symbol} is currently closed.`);
             }
-            // Calculate new TP and SL based on percentage or fixed value
+
             const tpPrice = tp && tp.includes('%')
                 ? currentPrice * (1 + parseFloat(tp.replace('%', '')) / 100)
                 : tp ? parseFloat(tp) : null;
@@ -263,14 +247,14 @@ class DerivExchange {
 
             console.log(`New Take-Profit Price: ${tpPrice}, New Stop-Loss Price: ${slPrice}`);
 
-            // Construct the modification request
             const request = {
                 contract_id: contractId,
                 ...(tpPrice && { barrier: tpPrice.toFixed(2) }),
                 ...(slPrice && { barrier2: slPrice.toFixed(2) })
             };
 
-            // Send the modification request to the API
+            console.log('Modification request:', JSON.stringify(request, null, 2));
+
             const response = await this.send({ modify_contract: request });
             console.log('Order Modification Response:', JSON.stringify(response, null, 2));
 
@@ -280,6 +264,7 @@ class DerivExchange {
             throw error;
         }
     }
+
 
     // Find a specific order based on criteria
     findOrder(orders, criteria) {
