@@ -158,6 +158,14 @@ async function displaySymbols(Deriv, type) {
     console.log(`Symbols (${type}):`, filteredSymbols);
 }
 
+// Function to close a position
+async function closePosition(Deriv, contractId) {
+    const sellPrice = 0;
+    const sellResponse = await Deriv.sellContract(contractId, sellPrice);
+    console.log('Position closed successfully:', sellResponse);
+    return sellResponse;
+}
+
 // Main function
 async function main() {
     try {
@@ -196,6 +204,15 @@ async function main() {
                 break;
             case 'symbols':
                 await displaySymbols(Deriv , params.T);
+                break;
+            case 'close':
+                const positions = await Deriv.fetchPortfolio();
+                const contractId = positions[0]?.contract_id;
+                if (contractId) {
+                    await closePosition(Deriv, contractId);
+                } else {
+                    console.error('No open positions found to close.');
+                }
                 break;
             default:
                 console.error('Invalid command:', command);
