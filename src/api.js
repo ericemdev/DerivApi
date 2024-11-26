@@ -82,6 +82,11 @@ class DerivExchange {
         })) || [];
     }
 
+    async fetchActiveSymbols() {
+        const response = await this.send({ active_symbols: 'brief' });
+        return response.active_symbols || [];
+    }
+
     async placeOrder({ symbol, amount, duration, durationUnit, contractType }) {
         const proposal = await this.send({
             proposal: 1,
@@ -133,7 +138,6 @@ class DerivExchange {
         return request;
     }
 
-
     async modifyOrder(contractId, tp = null, sl = null) {
         try {
             console.log(`Attempting to modify order for contract ID: ${contractId}`);
@@ -148,11 +152,9 @@ class DerivExchange {
         }
     }
 
-
     async unsubscribeAllTicks() {
         return await this.send({ forget_all: 'ticks' });
     }
-
 
     keepConnectionAlive() {
         setInterval(() => {

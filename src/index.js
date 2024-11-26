@@ -1,6 +1,15 @@
 const DerivExchange = require('./api');
 const Deriv = new DerivExchange();
 
+function parseArgs(args) {
+    const params = {};
+    args.forEach((arg) => {
+        const [key, value] = arg.split('=');
+        params[key.toUpperCase()] = value;
+    });
+    return params;
+}
+
 // Valid duration units
 const VALID_UNITS = ['d', 'm', 's', 'h', 't'];
 
@@ -31,7 +40,6 @@ async function fetchActiveSymbols(Deriv) {
     try {
         const response = await Deriv.send({ active_symbols: 'brief' });
         if (!response.active_symbols) throw new Error('No active symbols found.');
-
         return response.active_symbols.map((symbol) => symbol.symbol);
     } catch (error) {
         console.error('Error fetching active symbols:', error.message);
@@ -75,8 +83,8 @@ function selectValidDuration(contracts) {
     }
 
     for (const contract of contracts) {
-        const minDurationMatch = contract.minDuration.match(/\d+/); // Extract numeric value
-        const unitMatch = contract.minDuration.match(/[a-zA-Z]+/); // Extract unit
+        const minDurationMatch = contract.minDuration.match(/\d+/);
+        const unitMatch = contract.minDuration.match(/[a-zA-Z]+/);
 
         if (minDurationMatch && unitMatch) {
             const durationValue = parseInt(minDurationMatch[0], 10);
@@ -106,6 +114,35 @@ function adjustDurationForWeekends(duration, unit) {
     return duration;
 }
 
+// Function to place an order
+async function placeOrder(Deriv, contractType, symbol, params) {
+    const amount = params.Q || 1;
+    const expiry = params.E || 1;
+    const durationUnit = 'm';
+
+    const orderResponse = await Deriv.placeOrder({
+        symbol,
+        amount,
+        duration: expiry,
+        durationUnit,
+        contractType,
+    });
+    console.log('Order placed successfully:', orderResponse);
+}
+
+// Function to display balance
+async function displayBalance(Deriv, account) {
+    const response = await Deriv.fetchBalance();
+    const balance = account === 'real' ? response.balance : response.demo;
+    console.log(`${account.toUpperCase()} Balance:`, balance);
+}
+
+// Function to display symbols
+async function displaySymbols(Deriv, type) {
+    const symbols = await Deriv.fetchActiveSymbols();
+    const filteredSymbols = symbols.filter(symbol => symbol.market === type);
+    console.log(`Symbols (${type}):`, filteredSymbols);
+}
 
 // Main function
 async function main() {
@@ -115,6 +152,36 @@ async function main() {
         await Deriv.authorize();
         Deriv.keepConnectionAlive();
 
+        const args = process.argv.slice(2);
+        const command = args[0].toLowerCase();
+        const symbol = args[1];
+        const params = parseArgs(args.slice(2));
+
+        console.log('Command:', command);
+        console.log('Symbol:', symbol);
+        console.log('Parameters:', params);
+
+        switch (command) {
+            case 'long':
+            case 'buy':
+            case '1':
+                await placeOrder(Deriv, 'CALL', symbol, params);
+                break;
+            case 'short':
+            case 'sell':
+            case '-1':
+                await placeOrder(Deriv, 'PUT', symbol, params);
+                break;
+            case 'balance':
+                await displayBalance(Deriv, params.A);
+                break;
+            case 'symbols':
+                await displaySymbols(Deriv , params.T);
+                break;
+            default:
+                console.error('Invalid command:', command);
+        }
+
         const { tradeTypes } = await fetchInitialData(Deriv);
         const selectedSymbol = 'R_100';
 
@@ -123,35 +190,25 @@ async function main() {
             throw new Error(`Invalid symbol: ${selectedSymbol}`);
         }
 
-
         const contracts = await getValidContractDetails(Deriv, selectedSymbol);
         const { durationValue, durationUnit } = selectValidDuration(contracts);
 
-        if (contracts.length === 0) {
-            throw new Error(`No contracts available for symbol ${selectedSymbol}`);
-        }
+        const adjustedDuration = adjustDurationForWeekends(durationValue, durationUnit);
 
-        if (!VALID_UNITS.includes(durationUnit)) {
-            throw new Error(`Invalid duration unit: ${durationUnit}`);
-        }
-
-
+        // Place an order
         const orderResponse = await Deriv.placeOrder({
             symbol: selectedSymbol,
             amount: 8.5,
-            duration: durationValue,
+            duration: adjustedDuration,
             durationUnit,
             contractType: 'PUT',
         });
         console.log('Order placed successfully:', orderResponse);
 
-
         const portfolio = await Deriv.fetchPortfolio();
         console.log('Portfolio fetched:', portfolio);
 
         const contractId = portfolio[0]?.contract_id;
-        console.log('Selected Contract:', JSON.stringify(portfolio[0], null, 2));
-
         if (!contractId) {
             console.error('Contract ID not found for the selected contract.');
             return;
@@ -160,21 +217,12 @@ async function main() {
         // Modify the selected order
         const modifyResponse = await Deriv.modifyOrder(
             contractId,
-            '150.0', // Replace with the desired take-profit value
-            '100.0'  // Replace with the desired stop-loss value
+            '150.0',
+            '100.0'
         );
         console.log('Order modified successfully:', modifyResponse);
 
-        console.log('Order modified successfully:', modifyResponse);
-
-        // Sell the contract
-        // const contractId = orderResponse.buy?.contract_id;
-        // if (contractId) {
-        //     const sellResponse = await Deriv.sellContract(contractId, 10);
-        //     console.log('Sell response:', sellResponse);
-        // } else {
-        //     console.log('No contract ID found for the buy order.');
-        // }
+        // Graceful shutdown
         await Deriv.unsubscribeAllTicks();
     } catch (error) {
         console.error('Error in main:', error.message);
@@ -188,4 +236,5 @@ process.on('SIGINT', async () => {
     process.exit();
 });
 
+// Run the main function
 main();
