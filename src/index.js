@@ -39,6 +39,59 @@ async function fetchActiveSymbols(Deriv) {
     }
 }
 
+// Fetch valid contract details and durations
+async function getValidContractDetails(Deriv, symbol) {
+    try {
+        if (!symbol || typeof symbol !== 'string') {
+            throw new Error('Invalid symbol provided. It must be a non-empty string.');
+        }
+
+        console.log(`Fetching contracts for symbol: ${symbol}`);
+        const contracts = await Deriv.fetchContractsForSymbol(symbol);
+
+        if (!Array.isArray(contracts) || contracts.length === 0) {
+            throw new Error(`No contracts available for symbol ${symbol}`);
+        }
+
+        contracts.forEach((contract) => {
+            if (!contract.minDuration || typeof contract.minDuration !== 'string') {
+                console.warn(`Missing or invalid minDuration for contract:`, contract);
+                contract.minDuration = '1d'; // Assign a default value if missing
+            }
+        });
+
+        console.log('Available contracts:', JSON.stringify(contracts, null, 2));
+        return contracts;
+    } catch (error) {
+        console.error(`Error fetching contract details for symbol "${symbol}":`, error.message);
+        throw error;
+    }
+}
+
+// Select valid duration from contracts
+function selectValidDuration(contracts) {
+    if (!Array.isArray(contracts) || contracts.length === 0) {
+        throw new Error('No contracts available to select a valid duration.');
+    }
+
+    for (const contract of contracts) {
+        const minDurationMatch = contract.minDuration.match(/\d+/); // Extract numeric value
+        const unitMatch = contract.minDuration.match(/[a-zA-Z]+/); // Extract unit
+
+        if (minDurationMatch && unitMatch) {
+            const durationValue = parseInt(minDurationMatch[0], 10);
+            const durationUnit = unitMatch[0].toLowerCase();
+
+            if (VALID_UNITS.includes(durationUnit)) {
+                return { durationValue, durationUnit };
+            }
+        }
+    }
+
+    // If no valid duration found, throw an error
+    throw new Error('No valid duration found in the contracts.');
+}
+
 // Adjust duration for weekends
 function adjustDurationForWeekends(duration, unit) {
     if (unit !== 'd') return duration;
@@ -63,27 +116,25 @@ async function main() {
         Deriv.keepConnectionAlive();
 
         const { tradeTypes } = await fetchInitialData(Deriv);
+        const selectedSymbol = 'R_100';
 
-        const selectedSymbol = 'OTC_SPC';
         const validSymbols = tradeTypes.map((trade) => trade.symbol);
         if (!validSymbols.includes(selectedSymbol)) {
             throw new Error(`Invalid symbol: ${selectedSymbol}`);
         }
 
-        const contracts = await Deriv.fetchContractsForSymbol(selectedSymbol);
+
+        const contracts = await getValidContractDetails(Deriv, selectedSymbol);
+        const { durationValue, durationUnit } = selectValidDuration(contracts);
+
         if (contracts.length === 0) {
             throw new Error(`No contracts available for symbol ${selectedSymbol}`);
         }
 
-        // Parse and validate duration
-        let { minDuration } = contracts[0];
-        let durationValue = parseInt(minDuration.match(/\d+/)?.[0], 10);
-        let durationUnit = minDuration.match(/[a-zA-Z]+/)?.[0].toLowerCase();
-
         if (!VALID_UNITS.includes(durationUnit)) {
             throw new Error(`Invalid duration unit: ${durationUnit}`);
         }
-        durationValue = adjustDurationForWeekends(durationValue, durationUnit);
+
 
         const orderResponse = await Deriv.placeOrder({
             symbol: selectedSymbol,
