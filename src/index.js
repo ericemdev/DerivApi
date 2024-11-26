@@ -153,7 +153,7 @@ async function main() {
         Deriv.keepConnectionAlive();
 
         const args = process.argv.slice(2);
-        const command = args[0].toLowerCase();
+        const command = args[0]?.toLowerCase();
         const symbol = args[1];
         const params = parseArgs(args.slice(2));
 
