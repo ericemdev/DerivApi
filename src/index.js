@@ -5,7 +5,12 @@ function parseArgs(args) {
     const params = {};
     args.forEach((arg) => {
         const [key, value] = arg.split('=');
-        params[key.toUpperCase()] = value;
+        // Ensuring both key and value exist
+        if (key && value !== undefined) {
+            params[key.toUpperCase()] = value;
+        } else {
+            console.warn(`Invalid argument format: "${arg}". Expected "key=value".`);
+        }
     });
     return params;
 }
@@ -131,10 +136,19 @@ async function placeOrder(Deriv, contractType, symbol, params) {
 }
 
 // Function to display balance
-async function displayBalance(Deriv, account) {
-    const response = await Deriv.fetchBalance();
-    const balance = account === 'real' ? response.balance : response.demo;
-    console.log(`${account.toUpperCase()} Balance:`, balance);
+async function displayBalance(Deriv, account = 'demo') {
+    try {
+        if (!['real', 'demo'].includes(account)) {
+            throw new Error(`Invalid account type: ${account}. Use "real" or "demo".`);
+        }
+
+        const response = await Deriv.fetchBalance();
+        const balance = account === 'demo' ? response.demo : response.balance;
+
+        console.log(`${account.toUpperCase()} Balance:`, balance);
+    } catch (error) {
+        console.error('Error displaying balance:', error.message);
+    }
 }
 
 // Function to display symbols
@@ -156,6 +170,11 @@ async function main() {
         const command = args[0]?.toLowerCase();
         const symbol = args[1];
         const params = parseArgs(args.slice(2));
+
+        // Check if a symbol is provided
+        if (!symbol) {
+            throw new Error('Symbol is missing. Please provide a valid symbol.');
+        }
 
         console.log('Command:', command);
         console.log('Symbol:', symbol);
@@ -220,7 +239,7 @@ async function main() {
             '150.0',
             '100.0'
         );
-        console.log('Order modified successfully:', modifyResponse);
+        console.log('Order modified successfully✅:', modifyResponse);
 
         // Graceful shutdown
         await Deriv.unsubscribeAllTicks();
@@ -231,7 +250,7 @@ async function main() {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    console.log('Closing application...');
+    console.log('Closing application...🔐');
     await Deriv.unsubscribeAllTicks();
     process.exit();
 });
