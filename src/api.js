@@ -95,6 +95,19 @@ class DerivExchange {
 
     async placeOrder({ symbol, amount, duration, durationUnit, contractType }) {
         try {
+            if (!symbol || typeof symbol !== 'string') {
+                throw new Error('Invalid symbol provided');
+            }
+            if (!amount || isNaN(amount) || amount <= 0) {
+                throw new Error('Invalid amount value');
+            }
+            if (!duration || isNaN(duration) || duration <= 0) {
+                throw new Error('Invalid duration value');
+            }
+            if (!durationUnit || !['s', 'm', 'h', 'd'].includes(durationUnit)) {
+                throw new Error('Invalid duration unit. Must be "s", "m", "h", or "d".');
+            }
+
             console.log(`Placing order: ${contractType} ${symbol} for ${amount} units`);
 
             const proposal = await this.send({
