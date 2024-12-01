@@ -91,10 +91,10 @@ node src/index.js short SYMBOL Q=quantity T=type E=expiry A=account
     ```bash
     node src/index.js close ID=position_id
     ```
-  cancel all open orders
+  cancel an order
 - `Example`: 
     ```bash
-    node src/index.js cancel A=real
+    node src/index.js cancel symbol=order_symbol
     ```
   modify an open order
 - `Example`: 

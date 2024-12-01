@@ -205,6 +205,11 @@ async function main() {
             case 'symbols':
                 await displaySymbols(Deriv , params.T);
                 break;
+
+            case 'cancel' :
+                await Deriv.cancelOrder(params.C);
+                break;
+
             case 'close':
                 const positions = await Deriv.fetchPortfolio();
                 const contractId = positions[0]?.contract_id;

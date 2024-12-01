@@ -52,8 +52,14 @@ class DerivExchange {
     }
 
     async fetchBalance() {
-        return await this.send({ balance: 1 });
-    }
+        try {
+            const response = await this.send({ balance: 1 });
+            return response.balance?.balance || 0;
+        } catch (error) {
+            console.error('Error fetching balance:', error.message);
+            throw error;
+        }
+    };
 
     async fetchPortfolio() {
         const response = await this.send({ portfolio: 1 });
@@ -88,24 +94,38 @@ class DerivExchange {
     }
 
     async placeOrder({ symbol, amount, duration, durationUnit, contractType }) {
-        const proposal = await this.send({
-            proposal: 1,
-            amount: amount.toString(),
-            basis: 'stake',
-            contract_type: contractType,
-            currency: 'USD',
-            duration: duration.toString(),
-            duration_unit: durationUnit,
-            symbol,
-        });
+        try {
+            console.log(`Placing order: ${contractType} ${symbol} for ${amount} units`);
 
-        const buyRequest = {
-            buy: proposal.proposal.id,
-            price: amount.toString(),
-        };
+            const proposal = await this.send({
+                proposal: 1,
+                amount: amount.toString(),
+                basis: 'stake',
+                contract_type: contractType,
+                currency: 'USD',
+                duration: duration.toString(),
+                duration_unit: durationUnit,
+                symbol,
+            });
 
-        return await this.send(buyRequest);
+            if (!proposal || !proposal.proposal || !proposal.proposal.id) {
+                throw new Error('Failed to get a valid proposal');
+            }
+
+            const buyRequest = {
+                buy: proposal.proposal.id,
+                price: amount.toString(),
+            };
+
+            const response = await this.send(buyRequest);
+            console.log('Order placed successfully:', response);
+            return response;
+        } catch (error) {
+            console.error('Error placing order:', error.message);
+            throw error;
+        }
     }
+
 
     async sellContract(contractId, price) {
         const sellRequest = {
@@ -148,6 +168,17 @@ class DerivExchange {
             return response;
         } catch (error) {
             console.error('Failed to modify order:', error.message);
+            throw error;
+        }
+    }
+
+    async cancelOrders() {
+        try {
+            const response = await this.send({ forget_all: 'orders' });
+            console.log('All orders canceled successfully:', response);
+            return response;
+        } catch (error) {
+            console.error('Error canceling orders:', error.message);
             throw error;
         }
     }
