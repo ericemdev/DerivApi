@@ -9,7 +9,7 @@ Before you start, ensure you have the following installed:
 
 - **Node.js**
 - **Node Package Manager (npm)**
-- **Deriv API credentials** (`APP_ID` and `API_TOKEN`)
+- **Deriv API credentials** (`APP_ID` and `API_TOKEN`) link [here](https://api.deriv.com/dashboard/)
 
 ---
 
@@ -111,5 +111,5 @@ node src/index.js short SYMBOL Q=quantity T=type E=expiry A=account
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 ```
 
-author: Developed ❤️ and valour by Ericem
+author: Developed with ❤️ and valour by Ericem
 ```
