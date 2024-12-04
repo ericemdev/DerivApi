@@ -93,22 +93,28 @@ class DerivExchange {
         return response.active_symbols || [];
     }
 
-    async placeOrder({ symbol, amount, duration, durationUnit, contractType }) {
+
+
+    async placeOrder({ symbol, amount, duration, durationUnit, contractType, orderType = 'BINARY', account = 'PRACTICE' }) {
         try {
+            console.log(`Starting placeOrder with duration: ${duration}, durationUnit: ${durationUnit}`);
             if (!symbol || typeof symbol !== 'string') {
                 throw new Error('Invalid symbol provided');
             }
             if (!amount || isNaN(amount) || amount <= 0) {
                 throw new Error('Invalid amount value');
             }
-            if (!duration || isNaN(duration) || duration <= 0) {
+            if (!duration || isNaN(parseInt(duration)) || parseInt(duration) <= 0) {
                 throw new Error('Invalid duration value');
             }
             if (!durationUnit || !['s', 'm', 'h', 'd'].includes(durationUnit)) {
                 throw new Error('Invalid duration unit. Must be "s", "m", "h", or "d".');
             }
+            if (!orderType || typeof orderType !== 'string') {
+                throw new Error('Invalid order type provided');
+            }
 
-            console.log(`Placing order: ${contractType} ${symbol} for ${amount} units`);
+            console.log(`Placing ${orderType} order on ${account} account: ${contractType} ${symbol} for ${amount} units`);
 
             const proposal = await this.send({
                 proposal: 1,
@@ -116,7 +122,7 @@ class DerivExchange {
                 basis: 'stake',
                 contract_type: contractType,
                 currency: 'USD',
-                duration: duration.toString(),
+                duration: parseInt(duration).toString(),
                 duration_unit: durationUnit,
                 symbol,
             });
@@ -125,13 +131,32 @@ class DerivExchange {
                 throw new Error('Failed to get a valid proposal');
             }
 
-            const buyRequest = {
-                buy: proposal.proposal.id,
-                price: amount.toString(),
-            };
+            console.log(`Proposal received: ${JSON.stringify(proposal)}`);
 
-            const response = await this.send(buyRequest);
-            console.log('Order placed successfully:', response);
+            let orderRequest;
+            if (orderType.toUpperCase() === 'DIGITAL') {
+                orderRequest = {
+                    buy: proposal.proposal.id,
+                    price: amount.toString(),
+                    // Add other parameters specific to DIGITAL orders here if needed
+                };
+            } else if (orderType.toUpperCase() === 'BINARY') {
+                orderRequest = {
+                    buy: proposal.proposal.id,
+                    price: amount.toString(),
+                };
+            } else {
+                throw new Error(`Unsupported order type: ${orderType}`);
+            }
+
+            if (account.toUpperCase() === 'REAL') {
+                // Add real account handling logic if necessary
+            }
+
+            console.log(`Order request: ${JSON.stringify(orderRequest)}`);
+
+            const response = await this.send(orderRequest);
+            console.log(`${orderType} order placed successfully:`, response);
             return response;
         } catch (error) {
             console.error('Error placing order:', error.message);
@@ -140,7 +165,9 @@ class DerivExchange {
     }
 
 
-    async sellContract(contractId, price) {
+
+
+async sellContract(contractId, price) {
         const sellRequest = {
             sell: contractId,
             price: price,

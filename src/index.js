@@ -5,7 +5,6 @@ function parseArgs(args) {
     const params = {};
     args.forEach((arg) => {
         const [key, value] = arg.split('=');
-        // Ensuring both key and value exist
         if (key && value !== undefined) {
             params[key.toUpperCase()] = value;
         } else {
@@ -15,10 +14,8 @@ function parseArgs(args) {
     return params;
 }
 
-// Valid duration units
 const VALID_UNITS = ['d', 'm', 's', 'h', 't'];
 
-// Fetch initial data
 async function fetchInitialData(Deriv) {
     try {
         const balance = await Deriv.fetchBalance();
@@ -40,7 +37,6 @@ async function fetchInitialData(Deriv) {
     }
 }
 
-// Fetch active symbols
 async function fetchActiveSymbols(Deriv) {
     try {
         const response = await Deriv.send({ active_symbols: 'brief' });
@@ -52,7 +48,18 @@ async function fetchActiveSymbols(Deriv) {
     }
 }
 
-// Fetch valid contract details and durations
+async function fetchValidDurations(Deriv, symbol) {
+    try {
+        const contracts = await Deriv.fetchContractsForSymbol(symbol);
+        console.log('Contracts for symbol:', symbol, JSON.stringify(contracts, null, 2));
+        return contracts;
+    } catch (error) {
+        console.error(`Error fetching contract details for symbol "${symbol}":`, error.message);
+        throw error;
+    }
+}
+
+
 async function getValidContractDetails(Deriv, symbol) {
     try {
         if (!symbol || typeof symbol !== 'string') {
@@ -69,7 +76,7 @@ async function getValidContractDetails(Deriv, symbol) {
         contracts.forEach((contract) => {
             if (!contract.minDuration || typeof contract.minDuration !== 'string') {
                 console.warn(`Missing or invalid minDuration for contract:`, contract);
-                contract.minDuration = '1d'; // Assign a default value if missing
+                contract.minDuration = '1d';
             }
         });
 
@@ -81,7 +88,6 @@ async function getValidContractDetails(Deriv, symbol) {
     }
 }
 
-// Select valid duration from contracts
 function selectValidDuration(contracts) {
     if (!Array.isArray(contracts) || contracts.length === 0) {
         throw new Error('No contracts available to select a valid duration.');
@@ -101,11 +107,9 @@ function selectValidDuration(contracts) {
         }
     }
 
-    // If no valid duration found, throw an error
     throw new Error('No valid duration found in the contracts.');
 }
 
-// Adjust duration for weekends
 function adjustDurationForWeekends(duration, unit) {
     if (unit !== 'd') return duration;
 
@@ -119,11 +123,12 @@ function adjustDurationForWeekends(duration, unit) {
     return duration;
 }
 
-// Function to place an order
 async function placeOrder(Deriv, contractType, symbol, params) {
     const amount = params.Q || 1;
     const expiry = params.E || 1;
     const durationUnit = 'm';
+    const orderType = params.T || 'BINARY';
+    const account = params.A || 'PRACTICE';
 
     const orderResponse = await Deriv.placeOrder({
         symbol,
@@ -131,11 +136,12 @@ async function placeOrder(Deriv, contractType, symbol, params) {
         duration: expiry,
         durationUnit,
         contractType,
+        orderType,
+        account,
     });
     console.log('Order placed successfully:', orderResponse);
 }
 
-// Function to display balance
 async function displayBalance(Deriv, account = 'demo') {
     try {
         if (!['real', 'demo'].includes(account)) {
@@ -151,14 +157,12 @@ async function displayBalance(Deriv, account = 'demo') {
     }
 }
 
-// Function to display symbols
 async function displaySymbols(Deriv, type) {
     const symbols = await Deriv.fetchActiveSymbols();
     const filteredSymbols = symbols.filter(symbol => symbol.market === type);
     console.log(`Symbols (${type}):`, filteredSymbols);
 }
 
-// Function to close a position
 async function closePosition(Deriv, contractId) {
     const sellPrice = 0;
     const sellResponse = await Deriv.sellContract(contractId, sellPrice);
@@ -166,7 +170,6 @@ async function closePosition(Deriv, contractId) {
     return sellResponse;
 }
 
-// Main function
 async function main() {
     try {
         console.log('Starting Deriv application...🤙');
@@ -179,7 +182,6 @@ async function main() {
         const symbol = args[1];
         const params = parseArgs(args.slice(2));
 
-        // Check if a symbol is provided
         if (!symbol) {
             throw new Error('Symbol is missing. Please provide a valid symbol.');
         }
@@ -187,6 +189,9 @@ async function main() {
         console.log('Command:', command);
         console.log('Symbol:', symbol);
         console.log('Parameters:', params);
+
+        const contracts = await fetchValidDurations(Deriv, symbol);
+        console.log('Available contracts:', contracts);
 
         switch (command) {
             case 'long':
@@ -203,13 +208,11 @@ async function main() {
                 await displayBalance(Deriv, params.A);
                 break;
             case 'symbols':
-                await displaySymbols(Deriv , params.T);
+                await displaySymbols(Deriv, params.T);
                 break;
-
-            case 'cancel' :
-                await Deriv.cancelOrder(params.C);
+            case 'cancel':
+                await Deriv.cancelOrders();
                 break;
-
             case 'close':
                 const positions = await Deriv.fetchPortfolio();
                 const contractId = positions[0]?.contract_id;
@@ -231,18 +234,17 @@ async function main() {
             throw new Error(`Invalid symbol: ${selectedSymbol}`);
         }
 
-        const contracts = await getValidContractDetails(Deriv, selectedSymbol);
         const { durationValue, durationUnit } = selectValidDuration(contracts);
-
         const adjustedDuration = adjustDurationForWeekends(durationValue, durationUnit);
 
-        // Place an order
         const orderResponse = await Deriv.placeOrder({
             symbol: selectedSymbol,
             amount: 8.5,
             duration: adjustedDuration,
             durationUnit,
             contractType: 'PUT',
+            orderType: 'BINARY',
+            account: 'PRACTICE',
         });
         console.log('Order placed successfully:', orderResponse);
 
@@ -255,7 +257,6 @@ async function main() {
             return;
         }
 
-        // Modify the selected order
         const modifyResponse = await Deriv.modifyOrder(
             contractId,
             '150.0',
@@ -263,19 +264,16 @@ async function main() {
         );
         console.log('Order modified successfully✅:', modifyResponse);
 
-        // Graceful shutdown
         await Deriv.unsubscribeAllTicks();
     } catch (error) {
         console.error('Error in main:', error.message);
     }
 }
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Closing application...🔐');
     await Deriv.unsubscribeAllTicks();
     process.exit();
 });
 
-// Run the main function
 main();
