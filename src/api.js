@@ -138,7 +138,6 @@ class DerivExchange {
                 orderRequest = {
                     buy: proposal.proposal.id,
                     price: amount.toString(),
-                    // Add other parameters specific to DIGITAL orders here if needed
                 };
             } else if (orderType.toUpperCase() === 'BINARY') {
                 orderRequest = {
@@ -150,7 +149,7 @@ class DerivExchange {
             }
 
             if (account.toUpperCase() === 'REAL') {
-                // Add real account handling logic if necessary
+                console.log ('real..')
             }
 
             console.log(`Order request: ${JSON.stringify(orderRequest)}`);
